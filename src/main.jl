@@ -1,69 +1,54 @@
 using WK3
 
 function main()
-    # conversions
-    mmHgToPa = 133.32;
-    cm3Tom3 = 1e-6;
-
-    # non-dimensional scalings
-    Ps = 120*mmHgToPa;
-    Vs = 125*cm3Tom3;
-    Qs = 500*cm3Tom3;
-    ts = 0.8;
-
-    # model parameters
-    V0 = 10*cm3Tom3;
-
     # initialization
-    y0 = [80*mmHgToPa/Ps;125*cm3Tom3/Vs;0*cm3Tom3/Qs];
-    t0 = 0/ts;
-    tf = 0.8/ts;
+    numbeats = 10;
+    y0 = [80*WK3.mmHgToPa/WK3.Ps;125*WK3.cm3Tom3/WK3.Vs;0*WK3.cm3Tom3/WK3.Qs];
+    t0 = 0/WK3.ts;
+    tf = [0.8/WK3.ts for i in 1:numbeats];
+    system = WK3.CVSystem(length(y0));
 
-    # solver parameters
-    nvar = length(y0);
-    dtsav = 1e-3;
-    h0 = 1e-3;
-    hmin = 1e-16;
-    eps = 1e-8;
+    for k in 1:length(tf)
+        # solver loop
+        to,yo = odeint(y0,t0,k*tf[k],system.sparams,system.mparams,wk3odes,rkqs);
+        t0 += tf[k];
+        append!(system.t,to)
 
-    # solver loop
-    tic();
-    to,yo = odeint(y0,nvar,t0,tf,dtsav,eps,h0,hmin,wk3odes,rkqs);
-    toc();
-
-    # reshape output to vectors of individual state variables' time series
-    yvec = Vector{Float64}[];
-    for i = 1:length(yo[1])
-        yi = Float64[];
-        for j = 1:length(yo)
-            push!(yi,yo[j][i])
+        # reshape output to vectors of individual state variables' time series
+        for i = 1:length(yo[1])
+            for j = 1:length(yo)
+                if i == 1
+                    push!(system.Pa,yo[j][i])
+                elseif i == 2
+                    push!(system.V,yo[j][i])
+                elseif i == 3
+                    push!(system.Q,yo[j][i])
+                end
+                if j == length(yo)
+                    y0[1] = yo[j][1];
+                    y0[2] = 1;
+                    y0[3] = yo[j][3];
+                end
+            end
         end
-        push!(yvec,yi)
     end
 
     # diagnostic variables
-    E = Float64[];
-    τ1 = 0.215;
-    τ2 = 0.362;
-    m1 = 1.32;
-    m2 = 27.4;
-    Emax = 3.5e8;
-    Emin = 3.77e6;
-    tm = linspace(0,ts,1e4);
-    g1 = (tm/τ1).^m1;
-    g2 = (tm/τ2).^m2;
+    tm = linspace(0,WK3.ts,1e4);
+    g1 = (tm/system.mparams.τ1).^system.mparams.m1;
+    g2 = (tm/system.mparams.τ2).^system.mparams.m2;
     h1 = g1./(1+g1);
     h2 = 1./(1+g2);
-    k = (Emax-Emin)/maximum(h1.*h2);
-    for i = 1:length(to)
-        g1t = (to[i]*ts/τ1).^m1;
-        g2t = (to[i]*ts/τ2).^m2;
+    k = (system.mparams.Emax-system.mparams.Emin)/maximum(h1.*h2);
+    for i = 1:length(system.t)
+        g1t = (mod(system.t[i]*WK3.ts,system.mparams.th[end])/system.mparams.τ1).^system.mparams.m1;
+        g2t = (mod(system.t[i]*WK3.ts,system.mparams.th[end])/system.mparams.τ2).^system.mparams.m2;
         h1t = g1t/(1+g1t);
         h2t = 1/(1+g2t);
-        push!(E,k*h1t*h2t+Emin);
+        push!(system.E,k*h1t*h2t+system.mparams.Emin);
     end
-    Pv = E.*(yvec[2]*Vs-V0)/Ps;
+    system.Pv = system.E.*(system.V*WK3.Vs-system.mparams.V0)/WK3.Ps;
 
     # output
-    return to,yvec,Pv
+    return system
 end
