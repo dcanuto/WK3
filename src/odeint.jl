@@ -1,5 +1,5 @@
 function odeint(y0::Vector{Float64},t0::Float64,tf::Float64,sparams::WK3.SolverParams,
-    mparams::WK3.ModelParams,derivs::Function,stepper::Function)
+    mparams::WK3.ModelParams)
     # parameters for dependent variable scaling
     tiny = 1e-30;
 
@@ -39,7 +39,7 @@ function odeint(y0::Vector{Float64},t0::Float64,tf::Float64,sparams::WK3.SolverP
 
     while true
         # evaluate derivatives
-        derivs(t,y,dy,mparams,k);
+        wk3odes(t,y,dy,mparams,k);
         # scaling to monitor accuracy
         ys = abs.(y) + abs.(dy*h)+tiny;
         # store intermediate results
@@ -53,7 +53,7 @@ function odeint(y0::Vector{Float64},t0::Float64,tf::Float64,sparams::WK3.SolverP
             h = tf-t;
         end
         # attempt an integration step
-        t,hdid,hnext=stepper(y,dy,t,h,hdid,hnext,ys,derivs,sparams,mparams,k);
+        t,hdid,hnext=rkqs(y,dy,t,h,hdid,hnext,ys,sparams,mparams,k);
         # check valve state, set ventricular flow accordingly
         E,~ = elastancefn(t*ts,mparams,k);
         Pv = E*(y[2]*Vs-mparams.V0)/Ps;

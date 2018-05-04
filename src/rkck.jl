@@ -1,5 +1,5 @@
 function rkck(y::Vector{Float64},dy::Vector{Float64},n::Int64,t::Float64,
-    h::Float64,yout::Vector{Float64},yerr::Vector{Float64},derivs::Function,
+    h::Float64,yout::Vector{Float64},yerr::Vector{Float64},
     k::Float64,mparams::WK3.ModelParams)
     # function evaluation weights
     a2=0.2;a3=0.3;a4=0.6;a5=1.0;a6=0.875;b21=0.2;b31=3.0/40.0;b32=9.0/40.0;
@@ -19,19 +19,19 @@ function rkck(y::Vector{Float64},dy::Vector{Float64},n::Int64,t::Float64,
     # first step
     ytemp = y + h*b21*dy;
     # second step
-    derivs(t+a2*h,ytemp,ak2,mparams,k);
+    wk3odes(t+a2*h,ytemp,ak2,mparams,k);
     ytemp = y + h*(b31*dy+b32*ak2);
     # third step
-    derivs(t+a3*h,ytemp,ak3,mparams,k);
+    wk3odes(t+a3*h,ytemp,ak3,mparams,k);
     ytemp = y + h*(b41*dy+b42*ak2+b43*ak3);
     # fourth step
-    derivs(t+a4*h,ytemp,ak4,mparams,k);
+    wk3odes(t+a4*h,ytemp,ak4,mparams,k);
     ytemp = y + h*(b51*dy+b52*ak2+b53*ak3+b54*ak4);
     # fifth step
-    derivs(t+a5*h,ytemp,ak5,mparams,k);
+    wk3odes(t+a5*h,ytemp,ak5,mparams,k);
     ytemp = y + h*(b61*dy+b62*ak2+b63*ak3+b64*ak4+b65*ak5);
     # sixth step
-    derivs(t+a6*h,ytemp,ak6,mparams,k);
+    wk3odes(t+a6*h,ytemp,ak6,mparams,k);
     # accumulate increments w/ proper weights
     yout[:] = y + h*(c1*dy+c3*ak3+c4*ak4+c6*ak6);
     # estimate error

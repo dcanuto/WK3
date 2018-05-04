@@ -1,5 +1,5 @@
 function rkqs(y::Vector{Float64},dy::Vector{Float64},t::Float64,htry::Float64,
-    hdid::Float64,hnext::Float64,ys::Vector{Float64},derivs::Function,sparams::WK3.SolverParams,
+    hdid::Float64,hnext::Float64,ys::Vector{Float64},sparams::WK3.SolverParams,
     mparams::WK3.ModelParams,k::Float64)
     # quality control parameters
     safety = 0.9;
@@ -19,7 +19,7 @@ function rkqs(y::Vector{Float64},dy::Vector{Float64},t::Float64,htry::Float64,
 
     while true
         # attempt an integration step
-        rkck(y,dy,sparams.nvar,t,h,ytemp,yerr,derivs,k,mparams);
+        rkck(y,dy,sparams.nvar,t,h,ytemp,yerr,k,mparams);
         # check for error < tolerance (and possibly exit)
         if abs.(elastancefn(t*ts,mparams,k)[1]*(y[2]*Vs - mparams.V0)/Ps - y[1]) > sparams.eps
             errmax = 0.0;
