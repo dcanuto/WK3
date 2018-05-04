@@ -8,16 +8,21 @@ type CVSystem
     sparams::SolverParams
     mparams::ModelParams
 
-    function CVSystem(nvar=0)
+    function CVSystem(nvar=0,old=Dict("a"=>0),restart="no")
         this = new()
+        if restart == "no"
+            this.mparams = ModelParams();
+        elseif restart == "yes"
+            mparams = old["system"]["mparams"];
+            this.mparams = ModelParams(mparams,restart);
+        end
         this.Pa = [];
-        this.Pv = [];
         this.V = [];
-        this.E = [];
         this.Q = [];
+        this.Pv = [];
+        this.E = [];
         this.t = [];
         this.sparams = SolverParams(nvar);
-        this.mparams = ModelParams();
         return this
     end
 end

@@ -31,8 +31,8 @@ function odeint(y0::Vector{Float64},t0::Float64,tf::Float64,sparams::WK3.SolverP
 
     # calculate elastance scaling
     tm = linspace(0.,mparams.th[end],1e4);
-    g1 = (tm/mparams.τ1).^mparams.m1;
-    g2 = (tm/mparams.τ2).^mparams.m2;
+    g1 = (tm/mparams.t1).^mparams.m1;
+    g2 = (tm/mparams.t2).^mparams.m2;
     h1 = g1./(1+g1);
     h2 = 1./(1+g2);
     k = (mparams.Emax-mparams.Emin)/maximum(h1.*h2);

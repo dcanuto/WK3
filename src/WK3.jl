@@ -1,5 +1,7 @@
 module WK3
 
+using MAT
+
 # conversions
 include("constants.jl")
 
