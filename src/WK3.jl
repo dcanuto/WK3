@@ -1,6 +1,8 @@
 module WK3
 
 using MAT
+using Interpolations
+using Distributions
 
 # conversions
 include("constants.jl")
@@ -21,6 +23,9 @@ include("wk3odes.jl")
 # ventricular elastance function
 include("elastancefn.jl")
 
+# data assimilation
+include("patdatainterp.jl")
+
 export odeint
 export rkqs
 export rkck
@@ -29,5 +34,6 @@ export elastancefn
 export SolverParams
 export ModelParams
 export buildall
+export patdatainterp
 
 end
