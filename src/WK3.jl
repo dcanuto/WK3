@@ -25,6 +25,8 @@ include("elastancefn.jl")
 
 # data assimilation
 include("patdatainterp.jl")
+include("builderrors.jl")
+include("paramwalk.jl")
 
 export odeint
 export rkqs
@@ -35,5 +37,7 @@ export SolverParams
 export ModelParams
 export buildall
 export patdatainterp
+export builderrors
+export paramwalk!
 
 end

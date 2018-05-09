@@ -21,7 +21,8 @@ function rkqs(y::Vector{Float64},dy::Vector{Float64},t::Float64,htry::Float64,
         # attempt an integration step
         rkck(y,dy,sparams.nvar,t,h,ytemp,yerr,k,mparams);
         # check for error < tolerance (and possibly exit)
-        if abs.(elastancefn(t*ts,mparams,k)[1]*(y[2]*Vs - mparams.V0)/Ps - y[1]) > sparams.eps
+        if (abs.(elastancefn(t*ts,mparams,k)[1]*(y[2]*Vs - mparams.V0)/Ps - y[1]) >= sparams.eps
+            && sparams.h0 == sparams.h0nom)
             errmax = 0.0;
             for i = 1:sparams.nvar
                 errmax = max(errmax,abs.(yerr[i]/ys[i]));
@@ -37,10 +38,12 @@ function rkqs(y::Vector{Float64},dy::Vector{Float64},t::Float64,htry::Float64,
             if tnew == t
                 error("Step size underflow in rkqs.")
             end
-        else
+        elseif abs.(elastancefn(t*ts,mparams,k)[1]*(y[2]*Vs - mparams.V0)/Ps - y[1]) < sparams.eps
             warn("Transvalvular pressure difference under tolerance.
                 Plv - Pa = $(abs.(elastancefn(t*ts,mparams,k)[1]*(y[2]*Vs - mparams.V0)/Ps - y[1]))
                 at t = $t. Taking reduced-order time step.")
+            break
+        elseif sparams.h0 != sparams.h0nom # assimilating data, don't change stepsize
             break
         end
     end
