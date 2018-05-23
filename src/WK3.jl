@@ -28,6 +28,9 @@ include("patdatainterp.jl")
 include("builderrors.jl")
 include("paramwalk.jl")
 
+# Fisher information matrix
+include("fdjac.jl")
+
 export odeint
 export rkqs
 export rkck
@@ -39,5 +42,6 @@ export buildall
 export patdatainterp
 export builderrors
 export paramwalk!
+export fdjac
 
 end

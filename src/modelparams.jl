@@ -15,19 +15,15 @@ type ModelParams
     function ModelParams(old=Dict("a"=>0),restart="no")
         this = new()
         if restart == "no"
-            # this.Zc = 2e6; # Pa⋅s/m^3
             this.Zc = 2e5; # Pa⋅s/m^3
-            # this.R = 1.3e8;
             this.R = 2e7;
             this.Rav = 0;
-            # this.C = 1.35e-8 # m^3/Pa;
             this.C = 1.3e-7 # m^3/Pa;
             this.V0 = 10*cm3Tom3;
             this.t1 = 0.215;
             this.t2 = 0.362;
             this.m1 = 1.32;
             this.m2 = 27.4;
-            # this.Emax = 3.5e8;
             this.Emax = 7e7;
             this.Emin = 3.77e6;
             this.th = [0.8];
