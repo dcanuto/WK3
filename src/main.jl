@@ -5,7 +5,7 @@ function main()
     rstflag = "no"
 
     # initialization
-    numbeats = 10; # total number of cardiac cycles
+    numbeats = 30; # total number of cardiac cycles
     ensemblesize = 50;
     if rstflag == "no"
         y0 = [[rand(Distributions.Normal(10,1))*WK3.mmHgToPa/WK3.Ps;
