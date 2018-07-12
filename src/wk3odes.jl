@@ -19,9 +19,9 @@ function wk3odes(t::Float64,y::Vector{Float64},dy::Vector{Float64},mparams::WK3.
         dy[3] = 0.;
     end
 
-    for i = 1:length(dy)
-        if dy[i] > 1e6
-            warn("dy/dt above tolerance at t = $t. dE/dt = $dE.")
-        end
-    end
+    # for i = 1:length(dy)
+    #     if dy[i] > 1e6
+    #         warn("dy/dt above tolerance at t = $t. dE/dt = $dE.")
+    #     end
+    # end
 end

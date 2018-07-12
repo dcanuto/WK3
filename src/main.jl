@@ -5,7 +5,7 @@ function main()
     rstflag = "no"
 
     # initialization
-    numbeats = 30; # total number of cardiac cycles
+    numbeats = 60; # total number of cardiac cycles
     ensemblesize = 50;
     if rstflag == "no"
         y0 = [[rand(Distributions.Normal(10,1))*WK3.mmHgToPa/WK3.Ps;
@@ -31,7 +31,7 @@ function main()
 
     # data assimilation setup
     # load patient data
-    filename = "pdata.mat";
+    filename = "patient.mat";
     tf,qdata = patdatainterp(systems[1].mparams.th[1],filename);
 
     # allocators for ensemble augmented state, measurements
@@ -71,6 +71,7 @@ function main()
     innov = Float64[];
     θout = Vector{Float64}[];
     θoutv = Vector{Float64}[];
+    Pvout = Float64[];
     numassims = 0;
     println("Number of assimilations: $(length(tf))")
 
@@ -164,15 +165,18 @@ function main()
 
                 # parameters back into model
                 for i = 1:length(soln)
-                    mparams[i].Zc = θ[i][1]*θs[1];
-                    mparams[i].R = θ[i][2]*θs[2];
-                    mparams[i].C = θ[i][3]*θs[3];
+                    # mparams[i].Zc = θ[i][1]*θs[1];
+                    # mparams[i].R = θ[i][2]*θs[2];
+                    # mparams[i].C = θ[i][3]*θs[3];
                     # mparams[i].V0 = θ[i][4]*θs[4];
                     # mparams[i].t1 = θ[i][5]*θs[5];
                     # mparams[i].t2 = mparams[i].t1 + θ[i][6]*θs[6];
-                    mparams[i].m1 = θ[i][7]*θs[7];
-                    mparams[i].m2 = θ[i][8]*θs[8];
+                    # mparams[i].m1 = θ[i][7]*θs[7];
+                    # mparams[i].m2 = θ[i][8]*θs[8];
                     mparams[i].Emax = θ[i][9]*θs[9];
+                    if mparams[i].Emax <= mparams[i].Emin
+                        mparams[i].Emin = mparams[i].Emax - 1e5;
+                    end
                 end
 
                 # forecast state w/ forecast parameters (single time step)
@@ -209,11 +213,17 @@ function main()
 
                 # parameter Kalman gain
                 K = Pty*inv(Pyy);
+                # println("Parameter Kalman gain:")
+                # display(K)
 
                 # parameter analysis step
                 for i = 1:length(soln)
+                    # println("ith measurement replicate: $(yi[i])")
+                    # println("ith forecast measurement: $(Y[i])")
                     θ[i][:] += K*(yi[i] - Y[i]);
                 end
+
+                # println("Normalized θ after analysis: $(mean(θ))")
 
                 # RTPS parameter covariance inflation
                 for i in 1:length(θ[1])
@@ -226,6 +236,8 @@ function main()
                 for i = 1:length(soln)
                     θ[i][:] = θ[i][:] + p*((σtb-σta)./σta).*(θ[i][:]-θhat);
                 end
+
+                # println("Normalized θ after RTPS: $(mean(θ))")
 
                 # # compute FD Jacobian of observation vector w.r.t. parameters (per realization)
                 # yvec = [[Y[i]] for i in 1:length(soln)];
@@ -246,15 +258,18 @@ function main()
 
                 # analysis parameters back into ensemble members
                 for i = 1:length(soln)
-                    mparams[i].Zc = θ[i][1]*θs[1];
-                    mparams[i].R = θ[i][2]*θs[2];
-                    mparams[i].C = θ[i][3]*θs[3];
+                    # mparams[i].Zc = θ[i][1]*θs[1];
+                    # mparams[i].R = θ[i][2]*θs[2];
+                    # mparams[i].C = θ[i][3]*θs[3];
                     # mparams[i].V0 = θ[i][4]*θs[4];
                     # mparams[i].t1 = θ[i][5]*θs[5];
                     # mparams[i].t2 = mparams[i].t1 + θ[i][6]*θs[6];
-                    mparams[i].m1 = θ[i][7]*θs[7];
-                    mparams[i].m2 = θ[i][8]*θs[8];
+                    # mparams[i].m1 = θ[i][7]*θs[7];
+                    # mparams[i].m2 = θ[i][8]*θs[8];
                     mparams[i].Emax = θ[i][9]*θs[9];
+                    if mparams[i].Emax <= mparams[i].Emin
+                        mparams[i].Emin = mparams[i].Emax - 1e5;
+                    end
                     systems[i].mparams = mparams[i];
                     if mparams[i].Zc <= error.lb[1]
                         println("Warning: analysis Zc below lower bound for member $i.
@@ -376,6 +391,8 @@ function main()
                     end
                     σa[i] = std(c;corrected=true);
                 end
+                println("Prior standard deviation: $σb")
+                println("Posterior standard deviation: $σa")
                 xhat = mean(X);
                 # println("Prior standard deviation: $(σb)")
                 # println("Posterior standard deviation: $(σa)")
@@ -387,6 +404,22 @@ function main()
                 # output ensemble average state
                 xhat = mean(X);
                 append!(xout,[xhat])
+
+                # output ensemble average ventricular pressure
+                ecur = 0;
+                for i = 1:ensemblesize
+                    # calculate elastance scaling
+                    tm = linspace(0.,mparams[i].th[end],1e4);
+                    g1 = (tm/mparams[i].t1).^mparams[i].m1;
+                    g2 = (tm/mparams[i].t2).^mparams[i].m2;
+                    h1 = g1./(1+g1);
+                    h2 = 1./(1+g2);
+                    k = (mparams[i].Emax-mparams[i].Emin)/maximum(h1.*h2);
+                    ei,~ = WK3.elastancefn(t0[1],mparams[i],k)
+                    ecur += ei;
+                end
+                ecur /= ensemblesize;
+                push!(Pvout,ecur*(xhat[2]*WK3.Vs - mparams[1].V0)/WK3.Ps)
 
                 # analysis back into ensemble members
                 # reshape output to vectors of individual state variables' time series
@@ -509,5 +542,5 @@ function main()
     # end
 
     # output
-    return systems,tout,xoutv,yout,innov,θoutv
+    return systems,tout,xoutv,yout,innov,θoutv,Pvout
 end
