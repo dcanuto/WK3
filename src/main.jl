@@ -24,8 +24,14 @@ function main()
     t0 = [0/WK3.ts for i=1:ensemblesize];
     sparams = [systems[i].sparams for i=1:ensemblesize];
     mparams = [systems[i].mparams for i=1:ensemblesize];
+    tm = linspace(0.,systems[1].mparams.th[1],1e4);
+    g1 = zeros(length(tm));
+    g2 = zeros(length(tm));
+    h1 = zeros(length(tm));
+    h2 = zeros(length(tm));
     to = Vector{Float64}[];
     yo = Vector{Vector{Float64}}[];
+    ke = zeros(ensemblesize);
     append!(yo,[[zeros(1)]]);
     append!(to,[zeros(1)]);
 
@@ -106,8 +112,17 @@ function main()
             elseif nn > length(tf)
                 tfcur = [n*0.8/WK3.ts for i=1:ensemblesize];
             end
+            # calculate elastance scaling
+            for i = 1:ensemblesize
+                g1 .= (tm./mparams[i].t1).^mparams[i].m1;
+                g2 .= (tm./mparams[i].t2).^mparams[i].m2;
+                h1 .= g1./(1.+g1);
+                h2 .= 1./(1.+g2);
+                ke[i] .= (mparams[i].Emax.-mparams[i].Emin)./maximum(h1.*h2);
+            end
             # collect outputs
-            soln = pmap((a1,a2,a3,a4,a5)->WK3.odeint(a1,a2,a3,a4,a5),y0,t0,tfcur,sparams,mparams);
+            # println("Time integration:")
+            soln = pmap((a1,a2,a3,a4,a5,a6)->WK3.odeint(a1,a2,a3,a4,a5,a6),y0,t0,tfcur,sparams,mparams,ke);
             to = [soln[i][1] for i in 1:length(soln)];
             yo = [soln[i][2] for i in 1:length(soln)];
             for i=1:ensemblesize
@@ -116,11 +131,11 @@ function main()
 
             # data assimilation
             if nn <= length(tf)
-                println("Assimilating data at t = $(tfcur[1])")
+                # println("Assimilating data at t = $(tfcur[1])")
 
                 # get last time step taken, use as time step for assimilation
                 if tfcur[1] != t0[1] # ignore if measurement is at t0
-                    warn("Assimilating data. Fixing time step.")
+                    # warn("Assimilating data. Fixing time step.")
                     for i in 1:length(soln)
                         sparams[i].h0 = to[i][end] - to[i][end-1];
                     end
@@ -148,6 +163,7 @@ function main()
                 end
 
                 # forecast parameters (dimensional)
+                # println("Forecast parameters:")
                 θ = [WK3.paramwalk!(error,θs,θ[i]) for i in 1:length(systems)];
 
                 # non-dimensionalize parameters
@@ -179,8 +195,17 @@ function main()
                     end
                 end
 
+                # calculate elastance scaling
+                for i = 1:ensemblesize
+                    g1 .= (tm./mparams[i].t1).^mparams[i].m1;
+                    g2 .= (tm./mparams[i].t2).^mparams[i].m2;
+                    h1 .= g1./(1.+g1);
+                    h2 .= 1./(1.+g2);
+                    ke[i] .= (mparams[i].Emax.-mparams[i].Emin)./maximum(h1.*h2);
+                end
+
                 # forecast state w/ forecast parameters (single time step)
-                soln = pmap((a1,a2,a3,a4,a5)->WK3.odeint(a1,a2,a3,a4,a5),y0,t0,tfcur,sparams,mparams);
+                soln = pmap((a1,a2,a3,a4,a5,a6)->WK3.odeint(a1,a2,a3,a4,a5,a6),y0,t0,tfcur,sparams,mparams,ke);
                 to = [soln[i][1] for i in 1:length(soln)];
                 yoa = [soln[i][2] for i in 1:length(soln)];
 
@@ -194,22 +219,22 @@ function main()
                 xhat = mean(X);
                 yhat = mean(Y);
                 θhat = mean(θ);
-                println("Normalized ̂x, first forecast: $xhat")
-                println("Normalized ̂y, first forecast: $yhat")
-                println("Normalized ̂θ, first forecast: $θhat")
+                # println("Normalized ̂x, first forecast: $xhat")
+                # println("Normalized ̂y, first forecast: $yhat")
+                # println("Normalized ̂θ, first forecast: $θhat")
 
                 # forecast params./meas. cross covariance, meas. covariance
                 Pty = zeros(length(θhat),length(yhat))
                 Pyy = zeros(length(yhat),length(yhat))
                 for i = 1:length(soln)
-                    Pty += *((θ[i] - θhat),(Y[i] - yhat)');
-                    Pyy += *((Y[i] - yhat),(Y[i] - yhat)');
+                    Pty += *((θ[i] .- θhat),(Y[i] .- yhat)');
+                    Pyy += *((Y[i] .- yhat),(Y[i] .- yhat)');
                 end
-                Pty /= (ensemblesize);
-                Pyy /= (ensemblesize);
+                Pty ./= (ensemblesize);
+                Pyy ./= (ensemblesize);
 
                 # add meas. noise to meas. covariance (allows invertibility)
-                Pyy += diagm((error.odev[1]/WK3.Qs)^2*ones(length(yhat)),0);
+                Pyy += diagm((error.odev[1]/WK3.Qs)^2.*ones(length(yhat)),0);
 
                 # parameter Kalman gain
                 K = Pty*inv(Pyy);
@@ -220,7 +245,7 @@ function main()
                 for i = 1:length(soln)
                     # println("ith measurement replicate: $(yi[i])")
                     # println("ith forecast measurement: $(Y[i])")
-                    θ[i][:] += K*(yi[i] - Y[i]);
+                    θ[i][:] += K*(yi[i] .- Y[i]);
                 end
 
                 # println("Normalized θ after analysis: $(mean(θ))")
@@ -234,7 +259,7 @@ function main()
                 end
                 θhat = mean(θ);
                 for i = 1:length(soln)
-                    θ[i][:] = θ[i][:] + p*((σtb-σta)./σta).*(θ[i][:]-θhat);
+                    θ[i] .= θ[i] .+ p.*((σtb.-σta)./σta).*(θ[i].-θhat);
                 end
 
                 # println("Normalized θ after RTPS: $(mean(θ))")
@@ -330,10 +355,19 @@ function main()
                 # recalculate and output parameter averages (non-dimensional)
                 θhat = mean(θ);
                 append!(θout,[θhat])
-                println("Normalized analysis parameter averages: $θhat")
+                # println("Normalized analysis parameter averages: $θhat")
+
+                # calculate elastance scaling
+                for i = 1:ensemblesize
+                    g1 .= (tm./mparams[i].t1).^mparams[i].m1;
+                    g2 .= (tm./mparams[i].t2).^mparams[i].m2;
+                    h1 .= g1./(1.+g1);
+                    h2 .= 1./(1.+g2);
+                    ke[i] .= (mparams[i].Emax.-mparams[i].Emin)./maximum(h1.*h2);
+                end
 
                 # corrected forecast w/ analysis parameters
-                soln = pmap((a1,a2,a3,a4,a5)->WK3.odeint(a1,a2,a3,a4,a5),y0,t0,tfcur,sparams,mparams);
+                soln = pmap((a1,a2,a3,a4,a5,a6)->WK3.odeint(a1,a2,a3,a4,a5,a6),y0,t0,tfcur,sparams,mparams,ke);
                 to = [soln[i][1] for i in 1:length(soln)];
                 yoa = [soln[i][2] for i in 1:length(soln)];
 
@@ -354,8 +388,8 @@ function main()
                 # second forecast mean state, measurement
                 xhat = mean(X);
                 yhat = mean(Y);
-                println("Normalized ̂x, second forecast: $xhat")
-                println("Normalized ̂y, second forecast: $yhat")
+                # println("Normalized ̂x, second forecast: $xhat")
+                # println("Normalized ̂y, second forecast: $yhat")
 
                 # output second forecast measurement
                 push!(yout,yhat)
@@ -365,24 +399,24 @@ function main()
                 Pxy = zeros(length(xhat),length(yhat))
                 Pyy = zeros(length(yhat),length(yhat))
                 for i = 1:length(soln)
-                    Pxy += *((X[i] - xhat),(Y[i] - yhat)');
-                    Pyy += *((Y[i] - yhat),(Y[i] - yhat)');
+                    Pxy += *((X[i] .- xhat),(Y[i] .- yhat)');
+                    Pyy += *((Y[i] .- yhat),(Y[i] .- yhat)');
                 end
-                Pxy /= (ensemblesize);
-                Pyy /= (ensemblesize);
+                Pxy ./= (ensemblesize);
+                Pyy ./= (ensemblesize);
 
                 # add meas. noise to meas. covariance (allows invertibility)
-                Pyy += diagm((error.odev[1]/WK3.Qs)^2*ones(length(yhat)),0);
+                Pyy += diagm((error.odev[1]/WK3.Qs)^2.*ones(length(yhat)),0);
 
                 # Kalman gain
                 K = Pxy*inv(Pyy);
 
                 # analysis step, NRR tracking
                 for i = 1:length(soln)
-                    X[i][:] += K*(yi[i] - Y[i]);
-                    r2dot[i] += dot((Y[i]-yi),(Y[i]-yi));
+                    X[i][:] += K*(yi[i] .- Y[i]);
+                    r2dot[i] += dot((Y[i].-yi),(Y[i].-yi));
                 end
-                r1dot += sqrt.(dot((yhat-y),(yhat-y)));
+                r1dot += sqrt.(dot((yhat.-y),(yhat.-y)));
 
                 # RTPS multiplicative covariance inflation
                 for i in 1:length(X[1])
@@ -391,14 +425,14 @@ function main()
                     end
                     σa[i] = std(c;corrected=true);
                 end
-                println("Prior standard deviation: $σb")
-                println("Posterior standard deviation: $σa")
+                # println("Prior standard deviation: $σb")
+                # println("Posterior standard deviation: $σa")
                 xhat = mean(X);
                 # println("Prior standard deviation: $(σb)")
                 # println("Posterior standard deviation: $(σa)")
-                println("Normalized difference: $((σb-σa)./σa)")
+                # println("Normalized difference: $((σb-σa)./σa)")
                 for i = 1:length(soln)
-                    X[i][:] = X[i][:] + p*((σb-σa)./σa).*(X[i][:]-xhat);
+                    X[i] .= X[i] .+ p.*((σb.-σa)./σa).*(X[i].-xhat);
                 end
 
                 # output ensemble average state
@@ -408,18 +442,16 @@ function main()
                 # output ensemble average ventricular pressure
                 ecur = 0;
                 for i = 1:ensemblesize
-                    # calculate elastance scaling
-                    tm = linspace(0.,mparams[i].th[end],1e4);
-                    g1 = (tm/mparams[i].t1).^mparams[i].m1;
-                    g2 = (tm/mparams[i].t2).^mparams[i].m2;
-                    h1 = g1./(1+g1);
-                    h2 = 1./(1+g2);
-                    k = (mparams[i].Emax-mparams[i].Emin)/maximum(h1.*h2);
-                    ei,~ = WK3.elastancefn(t0[1],mparams[i],k)
+                    g1 .= (tm./mparams[i].t1).^mparams[i].m1;
+                    g2 .= (tm./mparams[i].t2).^mparams[i].m2;
+                    h1 .= g1./(1.+g1);
+                    h2 .= 1./(1.+g2);
+                    ke[i] .= (mparams[i].Emax.-mparams[i].Emin)./maximum(h1.*h2);
+                    ei,~ = WK3.elastancefn(t0[1],mparams[i],ke[i])
                     ecur += ei;
                 end
                 ecur /= ensemblesize;
-                push!(Pvout,ecur*(xhat[2]*WK3.Vs - mparams[1].V0)/WK3.Ps)
+                push!(Pvout,ecur.*(xhat[2].*WK3.Vs .- mparams[1].V0)./WK3.Ps)
 
                 # analysis back into ensemble members
                 # reshape output to vectors of individual state variables' time series

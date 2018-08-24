@@ -1,5 +1,5 @@
 function odeint(y0::Vector{Float64},t0::Float64,tf::Float64,sparams::WK3.SolverParams,
-    mparams::WK3.ModelParams)
+    mparams::WK3.ModelParams,k::Float64)
     # parameters for dependent variable scaling
     tiny = 1e-30;
 
@@ -29,19 +29,13 @@ function odeint(y0::Vector{Float64},t0::Float64,tf::Float64,sparams::WK3.SolverP
         tsav = t-sparams.dtsav*2;
     end
 
-    # calculate elastance scaling
-    tm = linspace(0.,mparams.th[end],1e4);
-    g1 = (tm/mparams.t1).^mparams.m1;
-    g2 = (tm/mparams.t2).^mparams.m2;
-    h1 = g1./(1+g1);
-    h2 = 1./(1+g2);
-    k = (mparams.Emax-mparams.Emin)/maximum(h1.*h2);
-
     while true
         # evaluate derivatives
+        # println("Derivative evaluation:")
         wk3odes(t,y,dy,mparams,k);
         # scaling to monitor accuracy
-        ys = abs.(y) + abs.(dy*h)+tiny;
+        # println("Scaling:")
+        ys .= abs.(y) .+ abs.(dy.*h).+tiny;
         # store intermediate results
         if saveflag && abs.(t-tsav) > abs(sparams.dtsav)
             push!(tout,t)
@@ -53,10 +47,11 @@ function odeint(y0::Vector{Float64},t0::Float64,tf::Float64,sparams::WK3.SolverP
             h = tf-t;
         end
         # attempt an integration step
+        # println("RKQS:")
         t,hdid,hnext=rkqs(y,dy,t,h,hdid,hnext,ys,sparams,mparams,k);
         # check valve state, set ventricular flow accordingly
         E,~ = elastancefn(t*ts,mparams,k);
-        Pv = E*(y[2]*Vs-mparams.V0)/Ps;
+        Pv = E.*(y[2].*Vs.-mparams.V0)./Ps;
         if Pv < y[1] && y[3] <= 0.
             y[3] = 0.;
         end
