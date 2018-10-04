@@ -5,12 +5,12 @@ function main()
     rstflag = "no"
 
     # initialization
-    numbeats = 10; # total number of cardiac cycles
+    numbeats = 30; # total number of cardiac cycles
     ensemblesize = 50;
     if rstflag == "no"
         y0 = [[rand(Distributions.Normal(10,1))*WK3.mmHgToPa/WK3.Ps;
-            rand(Distributions.Normal(125,12.5))*WK3.cm3Tom3/WK3.Vs;0*WK3.cm3Tom3/WK3.Qs] for i=1:ensemblesize]; # random
-        # y0 = [[10*WK3.mmHgToPa/WK3.Ps;125*WK3.cm3Tom3/WK3.Vs;0*WK3.cm3Tom3/WK3.Qs] for i=1:ensemblesize]; # uniform
+            rand(Distributions.Normal(135,10))*WK3.cm3Tom3/WK3.Vs;0*WK3.cm3Tom3/WK3.Qs] for i=1:ensemblesize]; # random
+        # y0 = [[10*WK3.mmHgToPa/WK3.Ps;135*WK3.cm3Tom3/WK3.Vs;0*WK3.cm3Tom3/WK3.Qs] for i=1:ensemblesize]; # uniform
         nvar = [3 for i=1:ensemblesize];
         systems = pmap((a1)->WK3.CVSystem(a1),nvar);
     elseif rstflag == "yes"
@@ -24,7 +24,7 @@ function main()
     t0 = [0/WK3.ts for i=1:ensemblesize];
     sparams = [systems[i].sparams for i=1:ensemblesize];
     mparams = [systems[i].mparams for i=1:ensemblesize];
-    tm = linspace(0.,systems[1].mparams.th[1],1e4);
+    tm = linspace(0.,systems[1].mparams.th[1],1e2);
     g1 = zeros(length(tm));
     g2 = zeros(length(tm));
     h1 = zeros(length(tm));
@@ -37,8 +37,8 @@ function main()
 
     # data assimilation setup
     # load patient data
-    filename = "healthy.mat";
-    tf,qdata,pdata,vdata = patdatainterp(systems[1].mparams.th[1],filename);
+    filename = "patient.mat";
+    tf,qdata,vdata = patdatainterp(systems[1].mparams.th[1],filename);
 
     # allocators for ensemble augmented state, measurements
     nparams = 9;
@@ -54,7 +54,7 @@ function main()
         θs[3] += mparams[i].C;
         θs[4] += mparams[i].V0;
         θs[5] += mparams[i].t1;
-        θs[6] += mparams[i].t2 - mparams[i].t1;
+        θs[6] += mparams[i].t2;
         θs[7] += mparams[i].m1;
         θs[8] += mparams[i].m2;
         θs[9] += mparams[i].Emax;
@@ -79,6 +79,14 @@ function main()
     ioutv = Vector{Float64}[];
     θout = Vector{Float64}[];
     θoutv = Vector{Float64}[];
+    Pθout = Vector{Float64}[];
+    Pθoutv = Vector{Float64}[];
+    Pxout = Vector{Float64}[];
+    Pxoutv = Vector{Float64}[];
+    lbx = Vector{Float64}[];
+    ubx = Vector{Float64}[];
+    lbxv = Vector{Float64}[];
+    ubxv = Vector{Float64}[];
     Pvout = Float64[];
     numassims = 0;
     println("Number of assimilations: $(length(tf))")
@@ -132,6 +140,23 @@ function main()
                 append!(systems[i].t,to[i])
             end
 
+            # diagnostic variables
+            for i=1:ensemblesize
+                g1 = (tm/systems[i].mparams.t1).^systems[i].mparams.m1;
+                g2 = (tm/systems[i].mparams.t2).^systems[i].mparams.m2;
+                h1 = g1./(1+g1);
+                h2 = 1./(1+g2);
+                k = (systems[i].mparams.Emax-systems[i].mparams.Emin)/maximum(h1.*h2);
+                for j = 1:length(to[i])
+                    g1t = (mod(to[i][j]*WK3.ts,systems[i].mparams.th[end])/systems[i].mparams.t1).^systems[i].mparams.m1;
+                    g2t = (mod(to[i][j]*WK3.ts,systems[i].mparams.th[end])/systems[i].mparams.t2).^systems[i].mparams.m2;
+                    h1t = g1t/(1+g1t);
+                    h2t = 1/(1+g2t);
+                    push!(systems[i].E,k*h1t*h2t+systems[i].mparams.Emin);
+                    push!(systems[i].Pv,systems[i].E[end]*(yo[i][j][2]*WK3.Vs-systems[i].mparams.V0)/WK3.Ps);
+                end
+            end
+
             # data assimilation
             if nn <= length(tf)
                 println("Assimilating data at t = $(tfcur[1])")
@@ -164,7 +189,7 @@ function main()
                     θ[i][3] = mparams[i].C;
                     θ[i][4] = mparams[i].V0;
                     θ[i][5] = mparams[i].t1;
-                    θ[i][6] = mparams[i].t2 - mparams[i].t1;
+                    θ[i][6] = mparams[i].t2;
                     θ[i][7] = mparams[i].m1;
                     θ[i][8] = mparams[i].m2;
                     θ[i][9] = mparams[i].Emax;
@@ -189,15 +214,15 @@ function main()
 
                 # parameters back into model
                 for i = 1:length(soln)
-                    mparams[i].Zc = θ[i][1]*θs[1];
-                    mparams[i].R = θ[i][2]*θs[2];
-                    mparams[i].C = θ[i][3]*θs[3];
+                    # mparams[i].Zc = θ[i][1]*θs[1];
+                    # mparams[i].R = θ[i][2]*θs[2];
+                    # mparams[i].C = θ[i][3]*θs[3];
                     # mparams[i].V0 = θ[i][4]*θs[4];
                     # mparams[i].t1 = θ[i][5]*θs[5];
-                    # mparams[i].t2 = mparams[i].t1 + θ[i][6]*θs[6];
+                    # mparams[i].t2 = θ[i][6]*θs[6];
                     # mparams[i].m1 = θ[i][7]*θs[7];
                     # mparams[i].m2 = θ[i][8]*θs[8];
-                    mparams[i].Emax = θ[i][9]*θs[9];
+                    # mparams[i].Emax = θ[i][9]*θs[9];
                     if mparams[i].Emax <= mparams[i].Emin
                         mparams[i].Emin = mparams[i].Emax - 1e5;
                     end
@@ -221,8 +246,6 @@ function main()
                 X = [yoa[i][end][1:end] for i in 1:length(soln)];
 
                 # vector of forecast measurements
-                # Y = [yoa[i][end][1:end] for i in 1:length(soln)]; # whole state
-                # Y = [[yoa[i][end][1],yoa[i][end][3]] for i in 1:length(soln)]; # Pa, flowrate
                 Y = [[yoa[i][end][2],yoa[i][end][3]] for i in 1:length(soln)]; # V, flowrate
 
                 # forecast mean state, parameters, measurement
@@ -244,8 +267,6 @@ function main()
                 Pyy ./= (ensemblesize);
 
                 # add meas. noise to meas. covariance (allows invertibility)
-                # Pyy += diagm((error.odev[1]/WK3.Qs)^2.*ones(length(yhat)),0);
-                # Pyy += diagm([(error.odev[1]/WK3.Ps)^2,(error.odev[2]/WK3.Vs)^2,(error.odev[3]/WK3.Qs)^2],0);
                 Pyy += diagm([(error.odev[2]/WK3.Vs)^2,(error.odev[3]/WK3.Qs)^2],0);
 
                 # parameter Kalman gain
@@ -295,18 +316,18 @@ function main()
 
                 # analysis parameters back into ensemble members
                 for i = 1:length(soln)
-                    mparams[i].Zc = θ[i][1]*θs[1];
-                    mparams[i].R = θ[i][2]*θs[2];
+                    # mparams[i].Zc = θ[i][1]*θs[1];
+                    # mparams[i].R = θ[i][2]*θs[2];
                     # mparams[i].C = θ[i][3]*θs[3];
                     # mparams[i].V0 = θ[i][4]*θs[4];
                     # mparams[i].t1 = θ[i][5]*θs[5];
-                    # mparams[i].t2 = mparams[i].t1 + θ[i][6]*θs[6];
+                    # mparams[i].t2 = θ[i][6]*θs[6];
                     # mparams[i].m1 = θ[i][7]*θs[7];
                     # mparams[i].m2 = θ[i][8]*θs[8];
-                    mparams[i].Emax = θ[i][9]*θs[9];
-                    if mparams[i].Emax <= mparams[i].Emin
-                        mparams[i].Emin = mparams[i].Emax - 1e5;
-                    end
+                    # mparams[i].Emax = θ[i][9]*θs[9];
+                    # if mparams[i].Emax <= mparams[i].Emin
+                    #     mparams[i].Emin = mparams[i].Emax - 1e5;
+                    # end
                     systems[i].mparams = mparams[i];
                     if mparams[i].Zc <= error.lb[1]
                         println("Warning: analysis Zc below lower bound for member $i.
@@ -369,6 +390,14 @@ function main()
                 append!(θout,[θhat])
                 # println("Normalized analysis parameter averages: $θhat")
 
+                # analysis parameter variance (for post-processing)
+                Ptt = zeros(length(θhat))
+                for i = 1:length(soln)
+                    Ptt += (θ[i] .- θhat).^2;
+                end
+                Ptt ./= ensemblesize;
+                append!(Pθout,[Ptt])
+
                 # calculate elastance scaling
                 for i = 1:ensemblesize
                     g1 .= (tm./mparams[i].t1).^mparams[i].m1;
@@ -412,72 +441,96 @@ function main()
                 append!(yout,[yhat])
                 append!(innov,[yhat-y])
 
-                # forecast state/meas. cross covariance, meas. covariance
-                Pxy = zeros(length(xhat),length(yhat))
-                Pyy = zeros(length(yhat),length(yhat))
-                for i = 1:length(soln)
-                    Pxy += *((X[i] .- xhat),(Y[i] .- yhat)');
-                    Pyy += *((Y[i] .- yhat),(Y[i] .- yhat)');
-                end
-                Pxy ./= (ensemblesize);
-                Pyy ./= (ensemblesize);
-
-                # add meas. noise to meas. covariance (allows invertibility)
-                # Pyy += diagm((error.odev[1]/WK3.Qs)^2.*ones(length(yhat)),0);
-                Pyy += diagm([(error.odev[2]/WK3.Vs)^2,(error.odev[3]/WK3.Qs)^2],0);
-                # Pyy += diagm([(error.odev[1]/WK3.Ps)^2,(error.odev[2]/WK3.Vs)^2,(error.odev[3]/WK3.Qs)^2],0);
-
-                # println("Added noise:")
-                # display(diagm([(error.odev[1]/WK3.Ps)^2,(error.odev[2]/WK3.Qs)^2],0))
-                # println("State cross-covariance:")
-                # display(Pxy)
-                # println("Measurement covariance:")
-                # display(Pyy)
-
-                # Kalman gain
-                K = Pxy*inv(Pyy);
-                # println("State Kalman gain:")
-                # display(K)
-
-                # analysis step, NRR tracking
-                for i = 1:length(soln)
-                    X[i][:] += K*(yi[i] .- Y[i]);
-                    r2dot[i] += dot((Y[i].-yi[i]),(Y[i].-yi[i]));
-                end
-                r1dot += sqrt.(dot((yhat.-y),(yhat.-y)));
-
-                # for i = 1:ensemblesize
-                #     println("Analysis values, member $i: $(X[i])")
+                # # forecast state/meas. cross covariance, meas. covariance
+                # Pxy = zeros(length(xhat),length(yhat))
+                # Pyy = zeros(length(yhat),length(yhat))
+                # for i = 1:length(soln)
+                #     Pxy += *((X[i] .- xhat),(Y[i] .- yhat)');
+                #     Pyy += *((Y[i] .- yhat),(Y[i] .- yhat)');
                 # end
-
-                # RTPS multiplicative covariance inflation
-                for i in 1:length(X[1])
-                    for j in 1:length(systems)
-                        c[j] = X[j][i];
-                    end
-                    σa[i] = std(c;corrected=true);
-                end
-                # println("Prior standard deviation: $σb")
-                # println("Posterior standard deviation: $σa")
-                xhat = mean(X);
-                # println("Prior standard deviation: $(σb)")
-                # println("Posterior standard deviation: $(σa)")
-                # println("Normalized difference: $((σb-σa)./σa)")
-                for i = 1:length(soln)
-                    for j = 1:length(X[i])
-                        if σa[j] != 0
-                            X[i][j] .= X[i][j] .+ p.*((σb[j].-σa[j])./σa[j]).*(X[i][j].-xhat[j]);
-                        end
-                    end
-                end
-
-                # for i = 1:ensemblesize
-                #     println("Analysis values after RTPS, member $i: $(X[i])")
+                # Pxy ./= (ensemblesize);
+                # Pyy ./= (ensemblesize);
+                #
+                # # add meas. noise to meas. covariance (allows invertibility)
+                # # Pyy += diagm((error.odev[1]/WK3.Qs)^2.*ones(length(yhat)),0);
+                # Pyy += diagm([(error.odev[2]/WK3.Vs)^2,(error.odev[3]/WK3.Qs)^2],0);
+                # # Pyy += diagm([(error.odev[1]/WK3.Ps)^2,(error.odev[2]/WK3.Vs)^2,(error.odev[3]/WK3.Qs)^2],0);
+                #
+                # # println("Added noise:")
+                # # display(diagm([(error.odev[1]/WK3.Ps)^2,(error.odev[2]/WK3.Qs)^2],0))
+                # # println("State cross-covariance:")
+                # # display(Pxy)
+                # # println("Measurement covariance:")
+                # # display(Pyy)
+                #
+                # # Kalman gain
+                # K = Pxy*inv(Pyy);
+                # # println("State Kalman gain:")
+                # # display(K)
+                #
+                # # analysis step, NRR tracking
+                # for i = 1:length(soln)
+                #     X[i][:] += K*(yi[i] .- Y[i]);
+                #     r2dot[i] += dot((Y[i].-yi[i]),(Y[i].-yi[i]));
                 # end
-
-                # output ensemble average state
-                xhat = mean(X);
+                # r1dot += sqrt.(dot((yhat.-y),(yhat.-y)));
+                #
+                # # for i = 1:ensemblesize
+                # #     println("Analysis values, member $i: $(X[i])")
+                # # end
+                #
+                # # RTPS multiplicative covariance inflation
+                # for i in 1:length(X[1])
+                #     for j in 1:length(systems)
+                #         c[j] = X[j][i];
+                #     end
+                #     σa[i] = std(c;corrected=true);
+                # end
+                # # println("Prior standard deviation: $σb")
+                # # println("Posterior standard deviation: $σa")
+                # xhat = mean(X);
+                # # println("Prior standard deviation: $(σb)")
+                # # println("Posterior standard deviation: $(σa)")
+                # # println("Normalized difference: $((σb-σa)./σa)")
+                # for i = 1:length(soln)
+                #     for j = 1:length(X[i])
+                #         if σa[j] != 0
+                #             X[i][j] .= X[i][j] .+ p.*((σb[j].-σa[j])./σa[j]).*(X[i][j].-xhat[j]);
+                #         end
+                #     end
+                # end
+                #
+                # # for i = 1:ensemblesize
+                # #     println("Analysis values after RTPS, member $i: $(X[i])")
+                # # end
+                #
+                # # output ensemble average state
+                # xhat = mean(X);
                 append!(xout,[xhat])
+
+                # state variance (for post-processing)
+                Pxx = zeros(length(xhat))
+                for i = 1:length(soln)
+                    Pxx += (X[i] .- xhat).^2;
+                end
+                Pxx ./= ensemblesize;
+                append!(Pxout,[Pxx])
+
+                # state 2-sigma quantiles (for post-processing)
+                for i = 1:length(xhat)
+                    xq = Float64[];
+                    for j = 1:length(soln)
+                        push!(xq,X[j][i])
+                    end
+                    q = quantile(xq,[0.025,0.975]);
+                    if i == 1
+                        append!(lbx,[ones(1)*q[1]])
+                        append!(ubx,[ones(1)*q[2]])
+                    else
+                        push!(lbx[end],q[1])
+                        push!(ubx[end],q[2])
+                    end
+                end
 
                 # output ensemble average ventricular pressure
                 ecur = 0;
@@ -489,6 +542,8 @@ function main()
                     ke[i] .= (mparams[i].Emax.-mparams[i].Emin)./maximum(h1.*h2);
                     ei,~ = WK3.elastancefn(tfcur[1]*WK3.ts,mparams[i],ke[i])
                     ecur += ei;
+                    systems[i].E[end] = ei;
+                    systems[i].Pv[end] = systems[i].E[end].*(X[i][2]*WK3.Vs-systems[i].mparams.V0)/WK3.Ps;
                 end
                 ecur /= ensemblesize;
                 push!(Pvout,ecur.*(xhat[2].*WK3.Vs .- mparams[1].V0)./WK3.Ps)
@@ -564,18 +619,30 @@ function main()
     # reshape ensemble averages into vectors of individual time series
     for i in 1:length(xout[1]) # i indexes state variables
         xo = Float64[];
+        Pxo = Float64[];
+        lb = Float64[];
+        ub = Float64[];
         for j in 1:length(xout) # j indexes time steps
             push!(xo,xout[j][i])
+            push!(Pxo,Pxout[j][i])
+            push!(lb,lbx[j][i])
+            push!(ub,ubx[j][i])
         end
         append!(xoutv,[xo])
+        append!(Pxoutv,[Pxo])
+        append!(lbxv,[lb])
+        append!(ubxv,[ub])
     end
 
     for i in 1:length(θout[1]) # i indexes state variables
         θo = Float64[];
+        Pθo = Float64[];
         for j in 1:length(θout) # j indexes time steps
             push!(θo,θout[j][i])
+            push!(Pθo,Pθout[j][i])
         end
         append!(θoutv,[θo])
+        append!(Pθoutv,[Pθo])
     end
 
     for i in 1:length(yout[1])
@@ -597,32 +664,31 @@ function main()
     ERa = sqrt.((ensemblesize)/(2*(ensemblesize)));
     println("Normalized RMSE ratio: $(Ra/ERa)")
 
-    # diagnostic variables
-    tm = linspace(0,WK3.ts,1e4);
-    for i=1:ensemblesize
-        g1 = (tm/systems[i].mparams.t1).^systems[i].mparams.m1;
-        g2 = (tm/systems[i].mparams.t2).^systems[i].mparams.m2;
-        h1 = g1./(1+g1);
-        h2 = 1./(1+g2);
-        k = (systems[i].mparams.Emax-systems[i].mparams.Emin)/maximum(h1.*h2);
-        for j = 1:length(systems[i].t)
-            g1t = (mod(systems[i].t[j]*WK3.ts,systems[i].mparams.th[end])/systems[i].mparams.t1).^systems[i].mparams.m1;
-            g2t = (mod(systems[i].t[j]*WK3.ts,systems[i].mparams.th[end])/systems[i].mparams.t2).^systems[i].mparams.m2;
-            h1t = g1t/(1+g1t);
-            h2t = 1/(1+g2t);
-            push!(systems[i].E,k*h1t*h2t+systems[i].mparams.Emin);
+
+    # save for post-processing
+    vnames = ["t" "x" "Px" "theta" "Pt" "Pv" "lb" "ub"];
+    for i in 1:length(vnames)
+        file = MAT.matopen("$(vnames[i])_p.mat","w");
+        if vnames[i] == "t"
+            write(file,"t",tout)
+        elseif vnames[i] == "x"
+            write(file,"x",xoutv)
+        elseif vnames[i] == "Px"
+            write(file,"Px",Pxoutv)
+        elseif vnames[i] == "theta"
+            write(file,"theta",θoutv)
+        elseif vnames[i] == "Pt"
+            write(file,"Pt",Pθoutv)
+        elseif vnames[i] == "Pv"
+            write(file,"Pv",Pvout)
+        elseif vnames[i] == "lb"
+            write(file,"lb",lbxv)
+        elseif vnames[i] == "ub"
+            write(file,"ub",ubxv)
         end
-        systems[i].Pv = systems[i].E.*(systems[i].V*WK3.Vs-systems[i].mparams.V0)/WK3.Ps;
+        close(file)
     end
 
-    # # save for post-processing
-    # for i=1:ensemblesize
-    #     filename = "system_$i.mat"; # name of solution save file
-    #     file = MAT.matopen(filename,"w");
-    #     write(file,"system",systems[i])
-    #     close(file)
-    # end
-
     # output
-    return systems,tout,xoutv,youtv,ioutv,θoutv,Pvout
+    return systems,tout,xoutv,youtv,ioutv,θoutv,Pθoutv,Pxoutv,Pvout,lbxv,ubxv
 end

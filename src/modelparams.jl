@@ -16,35 +16,35 @@ type ModelParams
         this = new()
         if restart == "no"
             # healthy
-            # this.Zc = 2e5; # Pa⋅s/m^3
-            # this.R = 2e7;
-            this.Zc = 2e5; # Pa⋅s/m^3
-            this.R = 3e7;
-            this.Rav = 2e5;
-            # this.Rav = 0;
-            # this.C = 1.3e-7 # m^3/Pa;
-            this.C = 1.5e-8 # m^3/Pa;
-            this.V0 = 10*cm3Tom3;
-            # this.t1 = 0.215;
-            this.t1 = 1;
-            # this.t2 = 0.362;
-            this.t2 = 0.3;
-            this.m1 = 2;
-            this.m2 = 27.4;
-            # this.m2 = 7;
-            this.Emax = 7e7;
-            # this.Emax = 1e8;
-            # # patient
-            # this.Zc = 0.9*2e5; # Pa⋅s/m^3
-            # this.R = 0.1*2e7;
-            # this.Rav = 0;
-            # this.C = 1.3e-7 # m^3/Pa;
+            # # this.Zc = 2e5; # Pa⋅s/m^3
+            # # this.R = 2e7;
+            # this.Zc = 1.186*2e5; # Pa⋅s/m^3
+            # this.R = 0.940*3e7;
+            # this.Rav = 2e5;
+            # # this.Rav = 0;
+            # # this.C = 1.3e-7 # m^3/Pa;
+            # this.C = 0.901*1.5e-8 # m^3/Pa;
             # this.V0 = 10*cm3Tom3;
-            # this.t1 = 0.215;
-            # this.t2 = 0.362;
-            # this.m1 = 1.35*1.32;
-            # this.m2 = 27.4;
-            # this.Emax = 0.05*7e7;
+            # # this.t1 = 0.215;
+            # this.t1 = 0.913*1;
+            # # this.t2 = 0.362;
+            # this.t2 = 1.308*0.3;
+            # this.m1 = 0.821*2;
+            # this.m2 = 0.389*27.4;
+            # # this.m2 = 7;
+            # # this.Emax = 7e7;
+            # this.Emax = 0.968*1e8;
+            # patient
+            this.Zc = 1.007*2e5; # Pa⋅s/m^3
+            this.R = 0.963*3e7;
+            this.Rav = 2e5;
+            this.C = 0.864*1e-8 # m^3/Pa;
+            this.V0 = 10*cm3Tom3;
+            this.t1 = 0.896*0.25;
+            this.t2 = 0.4;
+            this.m1 = 1.066*2;
+            this.m2 = 1.037*20;
+            this.Emax = 0.764*1.4e8;
             this.Emin = 3.77e6;
             this.th = [0.8];
         elseif restart == "yes"
